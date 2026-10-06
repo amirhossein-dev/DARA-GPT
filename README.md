@@ -1,50 +1,79 @@
-# Welcome to your Expo app 👋
+# DARA-GPT
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+DARA-GPT is an AI companion mobile app built with Expo and React Native. It blends conversational AI, memory-aware interfaces, reflective planning, calendar organization, and personality-based insight into a single dark-mode experience.
 
-## Get started
+## What this project is
 
-1. Install dependencies
+This app is designed to feel more like a personal operating layer for thought than a standard chatbot. The experience includes:
+
+- AI chat with layered reasoning modes
+- memory-aware context and project awareness
+- calendar and task flow thinking
+- personality and growth mapping
+- planning and unlocking feature progression
+- a calm, futuristic interface for deep work and reflection
+
+## Core experience
+
+The app is organized around a few major surfaces:
+
+- Chat: ongoing dialogue with different modes of response
+- Calendar: time-based planning and reminder-like flows
+- Personality: reflective insight and personal patterns
+- Plans: feature unlocking and progression model
+- Home: a portal-style dashboard entering the active field
+
+## Tech stack
+
+- Expo
+- React Native
+- Expo Router
+- TypeScript
+- Redux Toolkit
+- NativeWind
+- React Navigation
+
+## Getting started
+
+1. Install dependencies:
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. Start the app:
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. Open the app in:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   - an Android emulator
+   - an iOS simulator
+   - Expo Go
+   - a development build
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Run on Android
 
 ```bash
-npm run reset-project
+npm run android
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Project structure
 
-## Learn more
+```bash
+app/            # app routes and layout
+screens/        # screen-level UI
+redux/          # Redux state slices and store
+components/     # reusable UI components
+constants/      # theme and design tokens
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Product direction
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+DARA-GPT is best understood as an early-stage concept app for an AI-powered personal workspace. It is intentionally designed to feel immersive, intelligent, and calm while combining conversation, planning, and self-awareness into one experience.
 
-## Join the community
+## License
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This project is currently for personal and experimental use.
