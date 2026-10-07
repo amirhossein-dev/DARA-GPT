@@ -1,6 +1,7 @@
 import { store } from '@/redux/store'
 import { DarkTheme, Theme, ThemeProvider } from '@react-navigation/native'
 import { Stack } from 'expo-router'
+import { IdentityProvider, useIdentity } from '@/auth/provider'
 import { StatusBar } from 'expo-status-bar'
 import 'react-native-reanimated'
 import { Provider } from 'react-redux'
@@ -28,13 +29,24 @@ export default function RootLayout() {
   return (
     <Provider store={store}>
       <ThemeProvider value={DaraDarkTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
-          <Stack.Screen name='modal' options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
+        <IdentityProvider><AuthenticatedStack /></IdentityProvider>
 
         <StatusBar style='light' />
       </ThemeProvider>
     </Provider>
   )
+}
+
+function AuthenticatedStack() {
+  const { session } = useIdentity()
+  return <Stack screenOptions={{ headerShown: false }}>
+    <Stack.Protected guard={!session}>
+      <Stack.Screen name='sign-in' />
+    </Stack.Protected>
+    <Stack.Protected guard={!!session}>
+      <Stack.Screen name='(tabs)' />
+      <Stack.Screen name='account' />
+      <Stack.Screen name='modal' options={{ presentation: 'modal', title: 'Modal' }} />
+    </Stack.Protected>
+  </Stack>
 }
