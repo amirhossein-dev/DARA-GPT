@@ -35,11 +35,20 @@ export function IdentityProvider({children}:{children:React.ReactNode}) {
       setSession(next)
     })
     void restore()
+    const revalidate=(message:string)=>{
+      const client=configured.client
+      const sessionId=client?.snapshot()?.session.id
+      if(!client||!sessionId)return
+      void client.me().catch(()=>{
+        // A response from a previous session must not hide the current identity.
+        if(client.snapshot()?.session.id===sessionId)setProblem(message)
+      })
+    }
     const subscription=AppState.addEventListener('change',state=>{
-      if(state==='active'&&configured.client?.snapshot())void configured.client.me().catch(()=>setProblem('وضعیت نشست نیاز به بررسی دوباره دارد.'))
+      if(state==='active')revalidate('وضعیت نشست نیاز به بررسی دوباره دارد.')
     })
     // Periodic revalidation bounds stale role/membership UI while foregrounded.
-    const timer=setInterval(()=>{if(AppState.currentState==='active'&&configured.client?.snapshot())void configured.client.me().catch(()=>setProblem('وضعیت نشست تأیید نشد.'))},60000)
+    const timer=setInterval(()=>{if(AppState.currentState==='active')revalidate('وضعیت نشست تأیید نشد.')},60000)
     return ()=>{unsubscribe();subscription.remove();clearInterval(timer)}
   },[configured.client])
   if(loading)return <View style={{flex:1,backgroundColor:'#0B0F1A',justifyContent:'center'}}><ActivityIndicator color='#46DCC5'/></View>
