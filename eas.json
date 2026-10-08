@@ -1,0 +1,24 @@
+{
+  "cli": {
+    "version": "24.12.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "identity-development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "env": {
+        "APP_VARIANT": "identity-test",
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_PUBLIC_API_BASE_URL": "http://127.0.0.1:3101",
+        "EXPO_PUBLIC_TENANT_SLUG": "enterprise-pilot"
+      },
+      "android": {
+        "gradleCommand": ":app:assembleDebug",
+        "withoutCredentials": true,
+        "autoIncrement": false
+      }
+    }
+  }
+}
