@@ -19,6 +19,16 @@
         "withoutCredentials": true,
         "autoIncrement": false
       }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://10.0.2.2:3101",
+        "EXPO_PUBLIC_TENANT_SLUG": "enterprise-pilot"
+      },
+      "android": {
+        "buildType": "apk"
+      }
     }
   }
 }
