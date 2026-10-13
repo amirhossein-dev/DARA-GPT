@@ -1,4 +1,38 @@
-import { ApiError, Challenge, ClientType, NativeCredentials, SessionItem, SessionView, TokenStorage } from './types'
+import { ApiError, Challenge, ChatReply, ChatRequest, chatSessionKey, ClientType, NativeCredentials, SessionItem, SessionView, TokenStorage } from './types'
+
+function chatInput(input: ChatRequest): ChatRequest {
+  if (!input || typeof input.message !== 'string' || !input.message.trim() || input.message.length > 4000 || !Array.isArray(input.history) || input.history.length > 12)
+    throw new ApiError('INVALID_CHAT_REQUEST', 400)
+  let total = 0
+  const history = input.history.map(entry => {
+    if (!entry || !['user', 'assistant'].includes(entry.role) || typeof entry.text !== 'string' || !entry.text.trim() || entry.text.length > 4000)
+      throw new ApiError('INVALID_CHAT_REQUEST', 400)
+    total += entry.text.length
+    if (total > 16000) throw new ApiError('INVALID_CHAT_REQUEST', 400)
+    return { role: entry.role, text: entry.text }
+  })
+  return { message: input.message, history }
+}
+
+function chatOutput(value: unknown): ChatReply {
+  const v = value as ChatReply
+  if (!v || v.version !== '1.0' || v.provider !== 'gemini' || typeof v.requestId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v.requestId) ||
+    typeof v.replyText !== 'string' || !v.replyText.trim() || v.replyText.length > 16000 || typeof v.model !== 'string' || !/^gemini-[a-z0-9][a-z0-9.-]{0,99}$/.test(v.model) ||
+    !Number.isSafeInteger(v.latencyMs) || v.latencyMs < 0)
+    throw new ApiError('INVALID_CHAT_RESPONSE', 502)
+  const usage: NonNullable<ChatReply['usage']> = {}
+  if (v.usage !== undefined) {
+    if (!v.usage || typeof v.usage !== 'object' || Array.isArray(v.usage)) throw new ApiError('INVALID_CHAT_RESPONSE', 502)
+    for (const key of ['inputTokens', 'outputTokens', 'totalTokens'] as const) {
+      const count = v.usage[key]
+      if (count !== undefined) {
+        if (!Number.isSafeInteger(count) || count < 0) throw new ApiError('INVALID_CHAT_RESPONSE', 502)
+        usage[key] = count
+      }
+    }
+  }
+  return { version: '1.0', requestId: v.requestId, replyText: v.replyText, provider: 'gemini', model: v.model, latencyMs: v.latencyMs, ...(Object.keys(usage).length ? { usage } : {}) }
+}
 
 function viewOf(value: unknown, client: ClientType): SessionView {
   const v = value as SessionView
@@ -249,6 +283,16 @@ export class IdentityClient {
   async sessions(): Promise<SessionItem[]> {
     await this.ensureAccess()
     return this.raw('/identity/sessions', 'GET', undefined, true) as Promise<SessionItem[]>
+  }
+  async chatReply(input: ChatRequest): Promise<ChatReply> {
+    const body = chatInput(input)
+    const origin = chatSessionKey(this.view)
+    if (!origin) throw new ApiError('LOGIN_REQUIRED', 401)
+    await this.ensureAccess()
+    if (chatSessionKey(this.view) !== origin) throw new ApiError('CHAT_SESSION_CHANGED', 0)
+    const response = await this.raw('/chat/reply', 'POST', body, true)
+    if (chatSessionKey(this.view) !== origin) throw new ApiError('CHAT_SESSION_CHANGED', 0)
+    return chatOutput(response)
   }
   revokeSession(id: string) {
     return this.serialized(async () => {

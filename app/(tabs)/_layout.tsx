@@ -3,9 +3,11 @@ import { Colors } from '@/constants/theme'
 import { useTheme } from '@react-navigation/native'
 import { Tabs } from 'expo-router'
 import React from 'react'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 export default function TabLayout() {
   const { colors } = useTheme()
+  const insets = useSafeAreaInsets()
 
   const active = colors.primary
 
@@ -16,13 +18,15 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
+        tabBarHideOnKeyboard: true,
 
         tabBarActiveTintColor: active,
         tabBarInactiveTintColor: inactive,
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopColor: colors.border ?? Colors.dark.surface,
-          height: 64,
+          // BottomTabBar applies the bottom inset as padding inside this height.
+          height: 64 + insets.bottom,
           paddingTop: 8
         }
       }}

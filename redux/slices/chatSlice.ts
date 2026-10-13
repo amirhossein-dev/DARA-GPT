@@ -19,16 +19,7 @@ type ChatState = {
 }
 
 const initialState: ChatState = {
-  messages: [
-    {
-      id: nanoid(),
-      role: 'ai',
-      content: 'Field initialized. Conscious stream is open.',
-      mode: 'insight',
-      layer: 5,
-      timestamp: Date.now()
-    }
-  ],
+  messages: [],
   activeMemoryIds: []
 }
 

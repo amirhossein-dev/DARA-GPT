@@ -1,10 +1,15 @@
 import { useTheme } from '@react-navigation/native'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useAppDispatch, useAppSelector } from '../redux/hooks'
-import { addAImessage, addUserMessage, pushMemoryId } from '../redux/slices/chatSlice'
+import { addAImessage, addUserMessage } from '../redux/slices/chatSlice'
 import { decLayer, incLayer, setMode, setThinking } from '../redux/slices/uiSlice'
+import { useIdentity } from '../auth/provider'
+import type { IdentityClient } from '../auth/client'
+import { chatSessionKey } from '../auth/types'
+import { ChatRequestRunner } from '../chat/request'
 
 type Mode = 'insight' | 'technical' | 'narrative'
 
@@ -23,7 +28,13 @@ const MODE_ACCENT: Record<Mode, string> = {
 type Suggestion = { key: string; label: string; mode: Mode }
 
 export default function ChatScreen() {
+  const { client, session } = useIdentity()
+  return session ? <ChatSession key={chatSessionKey(session)} client={client} /> : null
+}
+
+function ChatSession({ client }: { client: IdentityClient }) {
   const { colors } = useTheme()
+  const insets = useSafeAreaInsets()
   const dispatch = useAppDispatch()
 
   type Layer = 1 | 2 | 3 | 4 | 5 | 6
@@ -38,10 +49,16 @@ export default function ChatScreen() {
   const mode = useAppSelector((s) => s.ui.mode) as Mode
   const isThinking = useAppSelector((s) => s.ui.isThinking) as boolean
 
-  const messages = useAppSelector((s) => s.chat.messages) as any[]
-  const activeMemoryIds = useAppSelector((s) => s.chat.activeMemoryIds) as string[]
+  const messages = useAppSelector((s) => s.chat.messages)
 
   const [input, setInput] = useState('')
+  const [error, setError] = useState('')
+  const runner = useMemo(() => new ChatRequestRunner(client), [client])
+
+  useEffect(() => () => {
+    runner.invalidate()
+    dispatch(setThinking(false))
+  }, [runner, dispatch])
 
   const scrollRef = useRef<ScrollView>(null)
 
@@ -91,49 +108,40 @@ export default function ChatScreen() {
     scrollToEnd()
   }, [messages.length, isThinking])
 
-  // ------------------------------------------------------------
-  // Demo AI response
-  // ------------------------------------------------------------
-  const mockResponse = (userText: string) => {
-    if (mode === 'technical') {
-      return `Understood.\n\n- Intent: ${userText}\n- Layer: L${layer}\n- Next: constraints → structure → implementation.`
-    }
-    if (mode === 'narrative') {
-      return `The field received it.\nWe stay in L${layer}. The shape will emerge—slowly.`
-    }
-    return `Noted.\nIn L${layer}, the deeper question is: what are you actually trying to resolve?`
-  }
-
   const onSend = () => {
-    const text = input.trim()
-    if (!text) return
-    if (isThinking) return
-
-    setInput('')
-    dispatch(addUserMessage({ content: text }))
-    dispatch(setThinking(true))
-    scrollToEnd()
-
-    // Demo AI
-    setTimeout(() => {
-      const aiText = mockResponse(text)
-
-      dispatch(addAImessage({ content: aiText, mode, layer }))
-      if (!activeMemoryIds.includes('project_context')) dispatch(pushMemoryId('project_context'))
-
-      dispatch(setThinking(false))
-      scrollToEnd()
-    }, 700)
+    void runner.send(input, messages, {
+      onStart: text => {
+        setInput('')
+        setError('')
+        dispatch(addUserMessage({ content: text }))
+        scrollToEnd()
+      },
+      onReply: reply => dispatch(addAImessage({ content: reply.replyText, mode, layer })),
+      onError: setError,
+      onBusy: busy => dispatch(setThinking(busy))
+    })
   }
 
   return (
-    <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={[styles.container, {
+        backgroundColor: colors.background,
+        // Our custom header owns top/side insets; the tab navigator owns bottom.
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right
+      }]}
+      // Adjust only the overlap with the IME, including Android edge-to-edge.
+      // Insets are inside this view, so its keyboard coordinate offset is zero.
+      behavior='padding'
+      keyboardVerticalOffset={0}
+    >
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: 'rgba(255,255,255,0.06)' }]}>
         <View>
-          <Text style={styles.headerMeta}>ACTIVE</Text>
+          <Text style={styles.headerMeta}>BASIC CHAT · SESSION HISTORY ONLY</Text>
           <Text style={[styles.headerTitle, { color: accent }]}>
-            L{layer} · {MODE_LABEL[mode]} STREAM
+            L{layer} · {MODE_LABEL[mode]} CHAT
           </Text>
         </View>
 
@@ -148,19 +156,24 @@ export default function ChatScreen() {
       </View>
 
       {/* Stream */}
-      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.streamContent} onContentSizeChange={scrollToEnd}>
-        {messages.map((m: any) => (
+      <ScrollView
+        ref={scrollRef}
+        style={styles.stream}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.streamContent}
+        onContentSizeChange={scrollToEnd}
+        keyboardShouldPersistTaps='handled'
+        automaticallyAdjustKeyboardInsets={false}
+        contentInsetAdjustmentBehavior='never'
+      >
+        {messages.map(m => (
           <View key={m.id} style={{ marginBottom: 18 }}>
             {m.role === 'ai' ? <AIBlock text={m.content} mode={(m.mode ?? mode) as Mode} layer={m.layer ?? layer} /> : <UserLine text={m.content} />}
           </View>
         ))}
 
-        {/* Memory capsule (non-intrusive) */}
-        {activeMemoryIds.includes('project_context') && (
-          <View style={styles.memoryCapsule}>
-            <Text style={[styles.memoryText, { color: 'rgba(82,227,255,0.9)' }]}>Memory Node · Project Context Loaded</Text>
-          </View>
-        )}
+        {!messages.length && <Text style={styles.thinkingText}>Send a message to begin.</Text>}
+        {!!error && <Text accessibilityRole='alert' style={{ color: '#FFB4AB', lineHeight: 22, marginVertical: 12 }}>{error}</Text>}
 
         {/* Thinking */}
         {isThinking && (
@@ -210,6 +223,8 @@ export default function ChatScreen() {
           placeholder='Enter thought…'
           placeholderTextColor='rgba(156,163,175,0.6)'
           style={styles.input}
+          maxLength={4000}
+          editable={!isThinking}
           multiline
           returnKeyType='default'
           blurOnSubmit={false}
@@ -277,6 +292,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
 
   header: {
+    flexShrink: 0,
     paddingHorizontal: 18,
     paddingTop: 14,
     paddingBottom: 12,
@@ -286,7 +302,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end'
   },
   headerMeta: {
-    paddingTop: 20,
     color: 'rgba(230,232,240,0.45)',
     fontSize: 10,
     letterSpacing: 1.4,
@@ -309,6 +324,7 @@ const styles = StyleSheet.create({
   },
   layerBtnText: { color: 'rgba(230,232,240,0.9)', fontSize: 18, fontWeight: '800' },
 
+  stream: { flex: 1, minHeight: 0 },
   streamContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14 },
 
   aiBlock: {
@@ -339,7 +355,7 @@ const styles = StyleSheet.create({
   thinkingDot: { width: 8, height: 8, borderRadius: 4 },
   thinkingText: { color: 'rgba(156,163,175,0.8)', fontSize: 12 },
 
-  suggestionsRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingBottom: 10 },
+  suggestionsRow: { flexShrink: 0, flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingBottom: 10 },
   chip: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -349,6 +365,7 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
 
   inputBar: {
+    flexShrink: 0,
     borderTopWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
