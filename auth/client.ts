@@ -1,4 +1,5 @@
 import { ApiError, Challenge, ChatReply, ChatRequest, chatSessionKey, ClientType, NativeCredentials, SessionItem, SessionView, TokenStorage } from './types'
+import { parseConversations, parseCreated, parseMessages, parseRequest, requestId } from '../chat/continuity'
 
 function chatInput(input: ChatRequest): ChatRequest {
   if (!input || typeof input.message !== 'string' || !input.message.trim() || input.message.length > 4000 || !Array.isArray(input.history) || input.history.length > 12)
@@ -182,6 +183,40 @@ export class IdentityClient {
   }
   async config() {
     return this.raw('/identity/config', 'GET') as Promise<{ otpMode: string; maxActiveSessions: number }>
+  }
+  private async conversationCall(path: string, method: string, body?: unknown): Promise<unknown> {
+    const origin = chatSessionKey(this.snapshot())
+    if (!origin) throw new ApiError('LOGIN_REQUIRED', 401)
+    // ensureAccess may enter the auth queue itself. Network work stays outside it.
+    await this.ensureAccess()
+    if (chatSessionKey(this.snapshot()) !== origin) throw new ApiError('CHAT_SESSION_CHANGED', 409)
+    try {
+      const value = await this.raw(path, method, body, true)
+      if (chatSessionKey(this.snapshot()) !== origin) throw new ApiError('CHAT_SESSION_CHANGED', 409)
+      return value
+    } catch (error) {
+      if (chatSessionKey(this.snapshot()) !== origin) throw new ApiError('CHAT_SESSION_CHANGED', 409)
+      throw error
+    }
+  }
+  async createConversation(clientRequestId: string) {
+    return parseCreated(await this.conversationCall('/chat/conversations', 'POST', { clientRequestId: requestId(clientRequestId) }))
+  }
+  async conversations(cursor?: string) {
+    return parseConversations(await this.conversationCall('/chat/conversations?limit=30' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), 'GET'))
+  }
+  async conversationMessages(conversationId: string, before?: string) {
+    const id = requestId(conversationId)
+    return parseMessages(await this.conversationCall(`/chat/conversations/${id}/messages?limit=30` + (before ? '&before=' + encodeURIComponent(before) : ''), 'GET'), id)
+  }
+  async sendConversationMessage(conversationId: string, clientRequestId: string, text: string) {
+    const id = requestId(conversationId), key = requestId(clientRequestId)
+    if (typeof text !== 'string' || !text.trim() || text.length > 4000 || text.includes('\0')) throw new ApiError('INVALID_CONVERSATION_REQUEST', 400)
+    return parseRequest(await this.conversationCall(`/chat/conversations/${id}/messages`, 'POST', { clientRequestId: key, text }), id, key)
+  }
+  async conversationRequest(conversationId: string, clientRequestId: string) {
+    const id = requestId(conversationId), key = requestId(clientRequestId)
+    return parseRequest(await this.conversationCall(`/chat/conversations/${id}/requests/${key}`, 'GET'), id, key)
   }
   requestOtp(input: { phone: string; tenant: string; deviceName: string }): Promise<Challenge> {
     return this.raw('/identity/otp/request', 'POST', { ...input, client: this.options.client }) as Promise<Challenge>
