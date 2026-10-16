@@ -74,7 +74,7 @@ export function continuityError(error: unknown): string {
 }
 export function requestLabel(r: StoredRequest): string {
   if (r.status === 'pending') return 'Message saved. Waiting for a reply…'
-  if (r.status === 'outcome_unknown') return 'Message saved; the model outcome is unknown. Sending again starts a separate request.'
+  if (r.status === 'outcome_unknown') return 'Message saved; the model outcome has not been confirmed. A new send starts a separate request.'
   if (r.status === 'failed') return 'Message saved, but no usable reply was saved. You may send a new request.'
   return 'Reply saved'
 }

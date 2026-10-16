@@ -75,7 +75,7 @@ export default function HomeScreen() {
           <View style={styles.statusBadge}>
             <View style={[styles.statusDot, { backgroundColor: colors.primary }]} />
             <Text style={[styles.statusText, { color: colors.primary }]}>
-              L{layer} · {String(mode).toUpperCase()} FIELD ACTIVE
+              L{layer} · {String(mode).toUpperCase()} DISPLAY PREFERENCE
             </Text>
           </View>
         </View>

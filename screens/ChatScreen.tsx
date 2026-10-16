@@ -4,7 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAppDispatch, useAppSelector } from '../redux/hooks'
-import { decLayer, incLayer, setMode, setThinking } from '../redux/slices/uiSlice'
+import { setLayer, setMode, setThinking } from '../redux/slices/uiSlice'
+import { LayerPicker, MODE_LABEL, ModePicker } from '../components/chat/ChatDisplayControls'
 import { useIdentity } from '../auth/provider'
 import type { IdentityClient } from '../auth/client'
 import { chatSessionKey } from '../auth/types'
@@ -12,9 +13,7 @@ import { Conversation, StoredMessage, continuityError, newRequestId, requestLabe
 import { ContinuityStateController } from '../chat/continuity-state'
 
 type Mode = 'insight' | 'technical' | 'narrative'
-const MODE_LABEL: Record<Mode, string> = { insight: 'INSIGHT', technical: 'TECHNICAL', narrative: 'NARRATIVE' }
 const MODE_ACCENT: Record<Mode, string> = { insight: '#AA7CFF', technical: '#52E3FF', narrative: '#5A6CFF' }
-const suggestions: { label: string; mode: Mode }[] = [{ label: 'Deepen', mode: 'insight' }, { label: 'Structure', mode: 'technical' }, { label: 'Narrate', mode: 'narrative' }]
 
 export default function ChatScreen() {
   const { client, session } = useIdentity()
@@ -92,11 +91,8 @@ function ChatSession({ client }: { client: IdentityClient }) {
     <View style={styles.readingWidth}>
       <View style={[styles.header, { borderBottomColor: 'rgba(255,255,255,0.06)' }]}>
         <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.headerMeta}>SAVED HISTORY · LIMITED MODEL CONTEXT</Text><Text style={[styles.headerTitle, { color: accent }]}>L{layer} · {MODE_LABEL[mode]} CHAT</Text></View>
-        <View style={styles.headerRight}>
-          <Pressable accessibilityRole='button' accessibilityLabel='Decrease layer' onPress={() => dispatch(decLayer())} style={styles.layerBtn}><Text style={styles.layerBtnText}>−</Text></Pressable>
-          <Pressable accessibilityRole='button' accessibilityLabel='Increase layer' onPress={() => dispatch(incLayer())} style={styles.layerBtn}><Text style={styles.layerBtnText}>+</Text></Pressable>
-        </View>
       </View>
+      <LayerPicker value={layer} onChange={value => dispatch(setLayer(value))} />
       {!selected ? <ConversationList client={client} onOpen={id => open(id)} /> : <>
         <View style={styles.navRow}><Action label='Conversations' onPress={() => open(null)} /><Text numberOfLines={1} style={[styles.conversationTitle, { flex: 1, minWidth: 0 }]}>{state.conversation?.title || 'Conversation'}</Text></View>
         <FlatList ref={listRef} data={state.messages} keyExtractor={m => m.id} style={styles.stream} contentContainerStyle={styles.streamContent}
@@ -105,17 +101,18 @@ function ChatSession({ client }: { client: IdentityClient }) {
           onScroll={({ nativeEvent: e }) => { followEnd.current = e.contentSize.height - e.layoutMeasurement.height - e.contentOffset.y < 60 }} scrollEventThrottle={100}
           ListHeaderComponent={state.nextCursor ? <Action label='Load earlier messages' disabled={state.loading} onPress={() => { followEnd.current = false; void controller.older() }} /> : null}
           renderItem={({ item: m }) => { const r = state.requests.find(r => r.turnId === m.turnId); return <View style={{ marginBottom: 18 }}>{m.role === 'assistant' ? <AIBlock text={m.text} /> : <UserLine text={m.text} />}{m.role === 'user' && r && r.status !== 'completed' && <Text style={styles.caption}>{requestLabel(r)}</Text>}</View> }}
-          ListEmptyComponent={!state.loading && !state.error ? <Text style={styles.caption}>Send a message to begin. Your draft stays on this screen until you send it.</Text> : null}
+          ListEmptyComponent={!state.loading && !state.error ? <Text style={styles.caption}>{pendingKey ? 'The server receipt has not been confirmed. Check status before continuing.' : 'Send a message to begin. Typing alone does not save or send your text.'}</Text> : null}
           ListFooterComponent={<View style={{ paddingBottom: 16 }}>
             {state.loading && <ActivityIndicator color={accent} accessibilityLabel='Loading messages' />}
-            {state.sending && <Text accessibilityLiveRegion='polite' style={styles.caption}>Sending… Waiting for the server receipt.</Text>}
+            {state.sending && <Text accessibilityLiveRegion='polite' style={styles.caption}>Sending. Server receipt has not been confirmed yet.</Text>}
             {!!state.error && <Text accessibilityRole='alert' style={styles.error}>{state.error}</Text>}
             {!!pendingKey && !state.sending && <Action label={state.checking ? 'Checking status…' : 'Check status'} disabled={state.checking} onPress={() => void controller.reconcile()} />}
-            {state.canRecoverOriginal && <Action label='Recover original request' disabled={state.sending || state.checking || state.loading} onPress={() => void controller.recoverOriginal()} />}
+            {state.canRecoverOriginal && <><Text style={styles.caption}>Recovery uses the original text and request ID. It may start processing if the server never accepted that request.</Text><Action label='Recover original request' disabled={state.sending || state.checking || state.loading} onPress={() => void controller.recoverOriginal()} /></>}
             {!!state.error && <Action label='Reload conversation' disabled={state.loading || state.sending} onPress={() => void controller.open(selected)} />}
           </View>}
         />
-        <View style={styles.suggestionsRow}>{suggestions.map(s => <Pressable key={s.mode} accessibilityRole='button' accessibilityState={{ selected: s.mode === mode }} onPress={() => dispatch(setMode(s.mode))} style={[styles.chip, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: s.mode === mode ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)' }]}><Text style={[styles.chipText, { color: 'rgba(230,232,240,0.95)' }]}>{s.label}</Text></Pressable>)}</View>
+        <ModePicker value={mode} onChange={value => dispatch(setMode(value))} />
+        {!!input && !state.sending && !pendingKey && <Text style={[styles.caption, { paddingHorizontal: 18 }]}>Text in editor; typing does not save or send it.</Text>}
         <View style={[styles.inputBar, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
           <TextInput accessibilityLabel='Message' value={input} onChangeText={setInput} placeholder='Enter thought…' placeholderTextColor='#9CA3AF' style={styles.input} maxLength={4000} multiline returnKeyType='default' blurOnSubmit={false} />
           <Pressable accessibilityRole='button' accessibilityLabel='Send message' accessibilityState={{ disabled: blocked || !input.trim() }} onPress={onSend} disabled={blocked || !input.trim()} style={({ pressed }) => [styles.sendBtn, { backgroundColor: accent, opacity: blocked || !input.trim() ? 0.35 : pressed ? 0.9 : 1 }]}><Text style={styles.sendText}>SEND</Text></Pressable>
@@ -189,16 +186,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     fontWeight: '800'
   },
-  headerRight: { flexDirection: 'row', gap: 10 },
-  layerBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  layerBtnText: { color: 'rgba(230,232,240,0.9)', fontSize: 18, fontWeight: '800' },
 
   stream: { flex: 1, minHeight: 0 },
   streamContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14 },
@@ -231,14 +218,6 @@ const styles = StyleSheet.create({
   thinkingDot: { width: 8, height: 8, borderRadius: 4 },
   thinkingText: { color: 'rgba(156,163,175,0.8)', fontSize: 12 },
 
-  suggestionsRow: { flexShrink: 0, flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingBottom: 10 },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1
-  },
-  chipText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
 
   inputBar: {
     flexShrink: 0,

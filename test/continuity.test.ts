@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { IdentityClient } from '../auth/client'
 import { ApiError, SessionView } from '../auth/types'
 import { ContinuityStateController, ContinuityTransport } from '../chat/continuity-state'
-import { Conversation, MessagePage, StoredRequest, parseMessages, parseRequest } from '../chat/continuity'
+import { Conversation, MessagePage, StoredRequest, continuityError, parseMessages, parseRequest, requestLabel } from '../chat/continuity'
 const a = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', b = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', key = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', turn = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 const conversation: Conversation = { id: a, title: 'Synthetic B2', createdAt: 1, updatedAt: 2 }
 function view(sid = a, kind: 'native' | 'web' = 'native'): SessionView { return { user: { id: 'user', phone: '+15550001001', firstName: 'Synthetic', lastName: 'B2' }, tenant: { id: 'tenant', slug: 'synthetic', name: 'Synthetic' }, membership: { id: 'member', roles: ['operator'], revision: 1 }, entitlements: { enterprise: false, paymentsEnabled: false }, session: { id: sid, client: kind, assurance: 'development_test', expiresAt: 99999999, idleTimeoutMs: 43200000, maxActiveSessions: 2 }, permissions: ['conversation.use'], csrfToken: kind === 'web' ? 'synthetic-csrf' : null } }
@@ -153,4 +153,19 @@ test('original-request recovery is unavailable without a missing receipt or afte
   f.status(async () => { throw new ApiError('REQUEST_NOT_FOUND', 404) }); await f.state.reconcile()
   f.switch(); assert.equal(await f.state.recoverOriginal(), false); f.state.dispose()
   assert.equal(await f.state.recoverOriginal(), false); assert.equal(f.posts(), 1)
+})
+
+test('recovery labels distinguish saved messages from unconfirmed model outcomes', () => {
+  assert.match(requestLabel(result(a, key, 'pending')), /Message saved.*Waiting for a reply/)
+  assert.equal(requestLabel(result()), 'Reply saved')
+  const failed = requestLabel(result(a, key, 'failed'))
+  assert.match(failed, /Message saved.*no usable reply was saved/)
+  const unknown = requestLabel(result(a, key, 'outcome_unknown'))
+  assert.match(unknown, /Message saved.*outcome has not been confirmed/)
+  assert.match(unknown, /new send starts a separate request/i)
+  assert.doesNotMatch(unknown, /failed|retry automatically|not saved/i)
+  const network = continuityError(new ApiError('NETWORK_ERROR', 0))
+  assert.match(network, /could not be confirmed/)
+  assert.match(network, /no message is sent automatically/)
+  assert.doesNotMatch(network, /expired|signed out|request failed/i)
 })
